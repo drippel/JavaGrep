@@ -9,9 +9,10 @@ public class SingleTest {
 
 
     @Test
-    public void before_context_short_m() {
+    public void exclude_from() {
 
-        String[] args = new String[] { "-r", "-C", "2", "ACTIVE", "./src/test/data" };
+        String[] args =
+            new String[] { "-r", "--exclude-from=./src/test/data/excludes.txt", "ACTIVE", "./src/test/data" };
         org.rip.regex.grep.main( args );
 
     }

@@ -28,46 +28,45 @@ public class grep {
 
     private static CommandLine commandLine;
 
-    private static Pattern     grepPattern;
+    private Pattern             grepPattern;
 
-    private static String       regex;
+    private String              regex;
 
     static {
         grepOptions = createOptions();
     }
 
+    private List< File >        filesToProcess;
 
-    private static List<File> filesToProcess ;
+    private ArrayList< String > excludes;
 
-    private static ArrayList< String > excludes;
-
-    public static Pattern compilePattern( final String pat ) {
+    public Pattern compilePattern( final String pat ) {
 
         int flags = 0;
 
         String pattern = new String( pat );
 
-        if( commandLine.hasOption( 'i' ) || commandLine.hasOption( "ignore-case" ) ) {
+        if( ignoreCase ) {
             flags |= Pattern.CASE_INSENSITIVE;
         }
 
-        if( ( commandLine.hasOption( 'w' ) || commandLine.hasOption( "word-regexp" ) )
-            &&
-            ( commandLine.hasOption( 'x' ) || commandLine.hasOption( "line-regexp" ) ) ) {
-            printErrorMessage( "Conflicting options (-w|--word-regexp) && (-x|--line-regexp)" );
-            return null;
-        }
-
-        if( commandLine.hasOption( 'w' ) || commandLine.hasOption( "word-regexp" ) ) {
-
+        /*
+         * if( wordRegex && lineRegex ) {
+         * printErrorMessage( "Conflicting options (-w|--word-regexp) && (-x|--line-regexp)" );
+         * return null;
+         * }
+         */
+        // we are overriding line-regex if both are supplied
+        if( wordRegex ) {
             // poor mans way to do it
             pattern = "\\b" + pattern + "\\b";
         }
+        else {
+            if( lineRegex ) {
 
-        if( commandLine.hasOption( 'x' ) || commandLine.hasOption( "line-regexp" ) ) {
-
-            // poor mans way to do it
-            pattern = "^" + pattern + "$";
+                // poor mans way to do it
+                pattern = "^" + pattern + "$";
+            }
         }
 
         return Pattern.compile( pattern, flags );
@@ -161,83 +160,15 @@ public class grep {
     }
 
 
-    private static void grepFileOrig( final File file ) {
 
-        long maxCount = maxCount();
-        long lineNumber = 0;
-        long count = 0;
-        long byteOffset = 0;
-        List< String > beforeContext = new LinkedList< String >();
-        List< String > afterContext = new LinkedList< String >();
+    private void printMessage( final String msg ) {
 
-        // keep it simple for now
-        try( BufferedReader bfr = new BufferedReader( new FileReader( file ) ) ) {
-
-            for( String line = bfr.readLine(); line != null; line = bfr.readLine() ) {
-
-                lineNumber++;
-                Matcher m = grepPattern.matcher( line );
-                boolean found = m.find();
-
-                if( ( found && !invertMatch() ) ) {
-                    count++;
-                    String match = line;
-                    if( printMatchOnly() ) {
-                        match = m.group();
-                    }
-                    printMatch( file, match, lineNumber, count, ( byteOffset + m.start() ), beforeContext, afterContext );
-                    if( printFileNameOnly() ) {
-                        return;
-                    }
-                    //
-                }
-                else if( !found && invertMatch() ) {
-                    count++;
-                    printMatch( file, line, lineNumber, count, ( byteOffset + m.start() ), beforeContext, afterContext );
-                    // TODO: this has a slightly different meaning
-                    if( printFileNameOnly() ) {
-                        return;
-                    }
-                }
-
-                if( ( maxCount != 0 ) && ( count >= maxCount ) ) {
-                    break;
-                }
-
-                byteOffset += line.getBytes().length;
-                byteOffset += 1; // TODO: end of line char - what about DOS/Win32?
-
-                beforeContext.add( line );
-                if( beforeContext.size() > beforeContext() ) {
-                    beforeContext.remove( 0 );
-                }
-            }
-        }
-        catch( IOException ioe ) {
-            System.out.println( ioe.getMessage() );
-        }
-
-        if( count == 0 ) {
-            // no matches in file
-            if( printFilesWithoutMatch() ) {
-                printMessage( file.getName() );
-            }
-        }
-
-        if( printCountOnly() ) {
-            printMessage( ( file.getName() + ":" + count ) );
-        }
-
-    }
-
-    private static void printMessage( final String msg ) {
-
-        if( !quiet() ) {
+        if( !quiet ) {
             System.out.println( msg );
         }
     }
 
-    private static void grepFiles() {
+    private void grepFiles() {
 
         // at this point the list was expanded into file names
         for( final File f : filesToProcess ) {
@@ -247,13 +178,164 @@ public class grep {
 
     }
 
-    public static boolean invertMatch() {
-        return commandLine.hasOption( 'v' ) || commandLine.hasOption( "invert-match" );
+
+
+    private void transferOptions( final CommandLine commandLine ) {
+
+        long context = 0;
+
+        if( commandLine.hasOption( 'C' ) || commandLine.hasOption( "context" ) ) {
+            String s = commandLine.getOptionValue( 'C' );
+            context = Long.parseLong( s );
+        }
+
+
+        if( commandLine.hasOption( 'A' ) || commandLine.hasOption( "after-context" ) ) {
+            String s = commandLine.getOptionValue( 'A' );
+            afterContext = Long.parseLong( s );
+        }
+        else {
+            afterContext = context;
+        }
+
+        if( commandLine.hasOption( 'B' ) || commandLine.hasOption( "before-context" ) ) {
+            String s = commandLine.getOptionValue( 'B' );
+            beforeContext = Long.parseLong( s );
+        }
+        else {
+            beforeContext = context;
+        }
+
+        if( commandLine.hasOption( 'i' ) || commandLine.hasOption( "ignore-case" ) ) {
+            ignoreCase = true;
+        }
+
+        if( commandLine.hasOption( 'v' ) || commandLine.hasOption( "invert-match" ) ) {
+            invertMatch = true;
+        }
+
+        maxCount = 0;
+        if( commandLine.hasOption( 'm' ) || commandLine.hasOption( "max-count" ) ) {
+            String s = commandLine.getOptionValue( 'm' );
+            maxCount = Long.parseLong( s );
+        }
+
+        if( commandLine.hasOption( 'l' ) || commandLine.hasOption( "files-with-matches" ) ) {
+            printFileNameOnly = true;
+        }
+
+        if( commandLine.hasOption( 'b' ) || commandLine.hasOption( "byte-offset" ) ) {
+            printByteOffset = true;
+        }
+
+        if( commandLine.hasOption( 'q' ) || commandLine.hasOption( "--quiet" ) || commandLine.hasOption( "silent" ) ) {
+            quiet = true;
+        }
+
+        if( commandLine.hasOption( 'c' ) || commandLine.hasOption( "count" ) ) {
+            printCountOnly = true;
+        }
+
+        printFilesWithoutMatch = commandLine.hasOption( 'L' ) || commandLine.hasOption( "files-without-match" );
+
+        wordRegex = commandLine.hasOption( 'w' ) || commandLine.hasOption( "word-regexp" );
+
+        lineRegex = commandLine.hasOption( 'x' ) || commandLine.hasOption( "line-regexp" );
+
+        if( commandLine.hasOption( "exclude-from" ) ) {
+            readExcludeFrom( commandLine.getOptionValue( "exclude-from" ) );
+        }
+
+        // this could be specified multiple times
+        if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
+            regex = commandLine.getOptionValue( commandLine.getOptionValue( 'e' ) );
+        }
+
+        if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
+            readRegexFromFile( commandLine.getOptionValue( 'f' ) );
+        }
+
+        noMessages = commandLine.hasOption( 's' ) || commandLine.hasOption( "no-messages" );
+
+        if( commandLine.hasOption( 'H' ) || commandLine.hasOption( "with-filename" ) ) {
+            printFileName = true;
+        }
+
+        if( commandLine.hasOption( 'h' ) || commandLine.hasOption( "no-filename" ) ) {
+            printFileName = false;
+        }
+
+        printMatchOnly = commandLine.hasOption( 'o' ) || commandLine.hasOption( "only-matching" );
+
+        printLineNumber = commandLine.hasOption( 'n' ) || commandLine.hasOption( "line-number" );
+
+        recurseDirectories = false;
+
+        if( commandLine.hasOption( 'd' ) || commandLine.hasOption( "directories" ) ) {
+
+            String val = commandLine.getOptionValue( 'd' );
+            if( StringUtils.endsWithIgnoreCase( val, "recurse" ) ) {
+                recurseDirectories = true;
+            }
+
+        }
+
+        if( commandLine.hasOption( 'R' )
+            || commandLine.hasOption( 'r' )
+            || commandLine.hasOption( "recursive" ) ) {
+            recurseDirectories = true;
+        }
+
+        if( commandLine.hasOption( "include" ) ) {
+            includeFilePattern = commandLine.getOptionValue( "include" );
+        }
+
+        if( commandLine.hasOption( "exclude" ) ) {
+            excludeFilePattern = commandLine.getOptionValue( "exclude" );
+        }
+
+        if( commandLine.hasOption( "exclude-dir" ) ) {
+            excludeDirPattern = commandLine.getOptionValue( "exclude-dir" );
+        }
+
     }
+
+    private boolean invertMatch = false;
+    private boolean ignoreCase = false;
+    private long    maxCount;
+
+    private boolean printFileNameOnly = false;
+
+    private boolean printByteOffset   = false;
+
+    private boolean quiet             = false;
+
+    private boolean printCountOnly    = false;
+
+    private boolean printFilesWithoutMatch = false;
+
+    private boolean wordRegex              = false;
+
+    private boolean lineRegex              = false;
+
+    private boolean noMessages             = false;
+
+    private boolean printFileName          = true;
+
+    private boolean printMatchOnly         = false;
+    private boolean printLineNumber=false;
+
+    private boolean recurseDirectories     = false;
+
+    private String  includeFilePattern     = null;
+
+    private String  excludeFilePattern     = null;
+
+    private String  excludeDirPattern      = null;
 
     public static void main( final String[] args ) {
 
-        reset();
+        grep theGrep = new grep();
 
         if( ArrayUtils.isEmpty( args ) ) {
             usage();
@@ -271,6 +353,8 @@ public class grep {
             return;
         }
 
+        theGrep.transferOptions( commandLine );
+
         // if version or help was given then print and quit
         if( commandLine.hasOption( "help" ) ) {
             usage();
@@ -284,34 +368,22 @@ public class grep {
 
         //
         if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
-            String r = commandLine.getOptionValue( 'e' );
-            if( r != null ) {
-                regex = r;
-            }
-            else {
+            if( ArrayUtils.isEmpty( commandLine.getOptionValues( 'e' ) ) ) {
                 usage();
                 return;
             }
         }
 
         if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
-            if( StringUtils.isNotEmpty( regex ) ) {
-                // cannot specify both
+            if( ArrayUtils.isEmpty( commandLine.getOptionValues( 'f' ) ) ) {
                 usage();
                 return;
             }
-
-            String r = readRegexFromFile();
-            if( StringUtils.isEmpty( r ) ) {
-                usage();
-                return;
-            }
-            regex = r;
         }
 
         if( commandLine.hasOption( "exclude-from" ) ) {
-            readExcludeFrom();
-            if( CollectionUtils.isEmpty( excludes ) ) {
+            String s = commandLine.getOptionValue( "exclude-from" );
+            if( StringUtils.isEmpty( s ) ) {
                 usage();
                 return;
             }
@@ -330,39 +402,34 @@ public class grep {
         // we are assuming: [OPTION]... PATTERN [FILE]...
         // options are pulled out by the command line processor
         int fileOffset = 0;
-        if( StringUtils.isEmpty( regex ) ) {
-            regex = (String)argList.get( 0 );
+        if( StringUtils.isEmpty( theGrep.regex ) ) {
+            theGrep.regex = (String)argList.get( 0 );
             fileOffset++;
         }
 
         // make sure its a good regex
         try {
-            grepPattern = compilePattern( regex );
+            theGrep.grepPattern = theGrep.compilePattern( theGrep.regex );
         }
         catch( final PatternSyntaxException pse ) {
-            printErrorMessage( "invalid regex syntax\nregex:" + regex + "\n" + pse.getMessage() );
+            theGrep.printErrorMessage( "invalid regex syntax\nregex:" + theGrep.regex + "\n" + pse.getMessage() );
             return;
         }
 
-        if( grepPattern == null ) {
+        if( theGrep.grepPattern == null ) {
             return;
         }
 
         // just to get things going
-        processFileArgs( argList.subList( fileOffset, argList.size() ) );
+        theGrep.processFileArgs( argList.subList( fileOffset, argList.size() ) );
 
         // ok lets start
-        grepFiles();
+        theGrep.grepFiles();
 
     }
 
-    private static void readExcludeFrom() {
+    private void readExcludeFrom( final String val ) {
 
-        String val = commandLine.getOptionValue( "exclude-from" );
-        if( StringUtils.isEmpty( val ) ) {
-            // trouble
-            return;
-        }
 
         try( BufferedReader br = new BufferedReader( new FileReader( new File( val ) ) ) ) {
             excludes = new ArrayList< String >();
@@ -379,56 +446,28 @@ public class grep {
 
     }
 
-    private static long maxCount() {
-        if( commandLine.hasOption( 'm' ) || commandLine.hasOption( "max-count" ) ){
-            String s = commandLine.getOptionValue( 'm' );
-            return Long.parseLong( s );
-        }
 
-        return 0;
-    }
 
-    private static boolean printByteOffset() {
 
-        return commandLine.hasOption( 'b' ) || commandLine.hasOption( "byte-offset" );
 
-    }
+    public void printErrorMessage( final String msg ) {
 
-    public static void printErrorMessage( final String msg ) {
-        if( !( commandLine.hasOption( 's' ) || commandLine.hasOption( "no-messages" ) ) ) {
+        if( !noMessages ) {
             System.out.println(msg);
         }
     }
 
-    private static boolean printFileName() {
 
-        boolean foundH = commandLine.hasOption( 'H' ) || commandLine.hasOption( "with-filename" );
-        if( foundH ) {
-            return true;
-        }
-        boolean foundh = commandLine.hasOption( 'h' ) || commandLine.hasOption( "no-filename" );
-        if( foundh ) {
-            return false;
-        }
 
-        // what other factors?
-        return true;
-    }
 
-    private static boolean printFileNameOnly() {
 
-        return( commandLine.hasOption( 'l' ) || commandLine.hasOption( "files-with-matches" ) );
-    }
 
-    private static boolean printLineNumber() {
 
-        return( commandLine.hasOption( 'n' ) || commandLine.hasOption( "line-number" ) );
-    }
+    private void printMatch( final File file, final String line, final long lineNumber,
+        final long count, final long byteOffset, final List< String > beforeContextLines,
+        final List< String > afterContextLines ) {
 
-    private static void printMatch( final File file, final String line, final long lineNumber,
-        final long count, final long byteOffset, final List< String > beforeContext, final List< String > afterContext ) {
-
-        if( quiet() || printFilesWithoutMatch() || printCountOnly() ) {
+        if( quiet || printFilesWithoutMatch || printCountOnly ) {
             return;
         }
 
@@ -438,8 +477,8 @@ public class grep {
          * }
          */
 
-        if( beforeContext() > 0 ) {
-            for( String bc : beforeContext ) {
+        if( beforeContext > 0 ) {
+            for( String bc : beforeContextLines ) {
                 String s = new String( bc );
                 if( filesToProcess.size() > 1 ) {
                     try {
@@ -462,18 +501,18 @@ public class grep {
             return;
         }
 
-        if( printFileName() && ( filesToProcess.size() > 1 ) ) {
+        if( printFileName && ( filesToProcess.size() > 1 ) ) {
             try {
                 msg += file.getCanonicalPath() + ":";
             }
             catch( IOException ioe ) {}
         }
 
-        if( printLineNumber() ) {
+        if( printLineNumber ) {
             msg += lineNumber + ":";
         }
 
-        if( printByteOffset() ) {
+        if( printByteOffset ) {
             msg += byteOffset + ":";
         }
 
@@ -481,8 +520,8 @@ public class grep {
 
         System.out.println( msg );
 
-        if( afterContext() > 0 ) {
-            for( String ac : afterContext ) {
+        if( afterContext > 0 ) {
+            for( String ac : afterContextLines ) {
                 String s = new String( ac );
                 if( filesToProcess.size() > 1 ) {
                     try {
@@ -494,20 +533,16 @@ public class grep {
             }
         }
 
-        if( ( beforeContext() > 0 ) || ( afterContext() > 0 ) ) {
+        if( ( beforeContext > 0 ) || ( afterContext > 0 ) ) {
             System.out.println( "--" );
         }
     }
 
-    private static boolean printMatchOnly() {
 
-        return commandLine.hasOption( 'o' ) || commandLine.hasOption( "only-matching" );
-
-    }
 
     // TODO: note that file names can contain wild cards too
     // so this method should also expand directories as well
-    private static void processFileArgs( final List list ) {
+    private void processFileArgs( final List list ) {
 
         filesToProcess = new ArrayList< File >();
 
@@ -525,7 +560,7 @@ public class grep {
                     }
                 }
                 else if( f.isDirectory() ) {
-                    if( recurseDirectories() ) {
+                    if( recurseDirectories ) {
                         filesToProcess.addAll( recurseDir( f ) );
                     }
                 }
@@ -534,7 +569,7 @@ public class grep {
 
     }
 
-    private static List< File > recurseDir( final File dir ) {
+    private List< File > recurseDir( final File dir ) {
 
         List< File > files = new ArrayList< File >();
 
@@ -559,40 +594,17 @@ public class grep {
 
     }
 
-    private static boolean recurseDirectories() {
 
-        if( commandLine.hasOption( 'd' ) || commandLine.hasOption( "directories" ) ) {
 
-            String val = commandLine.getOptionValue( 'd' );
-            if( StringUtils.endsWithIgnoreCase( val, "recurse" ) ) {
-                return true;
-            }
 
-        }
 
-        if( commandLine.hasOption( 'R' )
-            || commandLine.hasOption( 'r' )
-            || commandLine.hasOption( "recursive" ) ) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static boolean quiet() {
-
-        return commandLine.hasOption( 'q' ) || commandLine.hasOption( "--quiet" ) || commandLine.hasOption( "silent" );
-
-    }
-
-    private static String readRegexFromFile() {
+    private void readRegexFromFile( final String fname ) {
         String val = null;
 
-        String f = commandLine.getOptionValue( 'f' );
-        File file = new File(f);
+        File file = new File( fname );
         if( file.exists() && file.isFile() ) {
 
-            try( BufferedReader br = new BufferedReader( new FileReader( f ) ) ){
+            try( BufferedReader br = new BufferedReader( new FileReader( file ) ) ) {
 
                 String line = br.readLine();
                 if( StringUtils.isNotBlank( line ) ) {
@@ -601,14 +613,14 @@ public class grep {
 
             }
             catch( IOException e ) {
-                printErrorMessage( "Cannot open file:" + f );
+                printErrorMessage( "Cannot open file:" + fname );
             }
         }
 
-        return val ;
+        regex = val;
     }
 
-    private static void reset() {
+    private void reset() {
 
         commandLine = null;
         grepPattern = null;
@@ -701,28 +713,27 @@ public class grep {
 
     }
 
-    public static boolean includeFile( final File f ) {
+    public boolean includeFile( final File f ) {
 
-        if( commandLine.hasOption( "include" ) ) {
+        if( StringUtils.isNotEmpty( includeFilePattern ) ) {
 
-            String pat = commandLine.getOptionValue( "include" );
             String nm = FilenameUtils.getName( f.getName() );
-            return FilenameUtils.wildcardMatch( nm, pat );
+            return FilenameUtils.wildcardMatch( nm, includeFilePattern );
 
         }
 
         return true;
     }
 
-    public static boolean excludeFile( final File f ) {
+    public boolean excludeFile( final File f ) {
 
-        if( commandLine.hasOption( "exclude" ) ) {
-            String pat = commandLine.getOptionValue( "exclude" );
+        if( StringUtils.isNotBlank( excludeFilePattern ) ) {
+
             String nm = FilenameUtils.getName( f.getName() );
-            return FilenameUtils.wildcardMatch( nm, pat );
+            return FilenameUtils.wildcardMatch( nm, excludeFilePattern );
         }
 
-        if( commandLine.hasOption( "exclude-from" ) ) {
+        if( CollectionUtils.isNotEmpty( excludes ) ) {
             for( String pat : excludes ) {
                 String nm = FilenameUtils.getName( f.getName() );
                 boolean ex = FilenameUtils.wildcardMatch( nm, pat );
@@ -736,11 +747,10 @@ public class grep {
 
     }
 
-    private static boolean excludeDir( final File f ) {
+    private boolean excludeDir( final File f ) {
 
-        if( commandLine.hasOption( "exclude-dir" ) ) {
-            String pat = commandLine.getOptionValue( "exclude-dir" );
-            if( FilenameUtils.wildcardMatch( FilenameUtils.getName( f.getName() ), pat ) ) {
+        if( StringUtils.isNotBlank( excludeDirPattern ) ) {
+            if( FilenameUtils.wildcardMatch( FilenameUtils.getName( f.getName() ), excludeDirPattern ) ) {
                 return true;
             }
         }
@@ -748,60 +758,28 @@ public class grep {
         return false;
     }
 
-    private static boolean printFileNamesOnly() {
+    private boolean printFileNamesOnly() {
 
-        return printFilesWithoutMatch() || printFileNameOnly();
+        return printFilesWithoutMatch || printFileNameOnly;
     }
 
-    private static boolean printFilesWithoutMatch() {
 
-        return commandLine.hasOption( 'L' ) || commandLine.hasOption( "files-without-match" );
-    }
 
-    private static boolean printCountOnly() {
 
-        return commandLine.hasOption( 'c' ) || commandLine.hasOption( "count" );
-    }
+    private long beforeContext = 0;
 
-    private static long beforeContext() {
+    private long afterContext = 0;
 
-        if( commandLine.hasOption( 'B' ) || commandLine.hasOption( "before-context" ) ) {
-            String s = commandLine.getOptionValue( 'B' );
-            return Long.parseLong( s );
-        }
 
-        return context();
-    }
 
-    private static long afterContext() {
+    private void grepFile( final File file ) {
 
-        if( commandLine.hasOption( 'A' ) || commandLine.hasOption( "after-context" ) ) {
-            String s = commandLine.getOptionValue( 'A' );
-            return Long.parseLong( s );
-        }
 
-        return context();
-    }
-
-    private static long context() {
-
-        if( commandLine.hasOption( 'C' ) || commandLine.hasOption( "context" ) ) {
-            String s = commandLine.getOptionValue( 'C' );
-            return Long.parseLong( s );
-        }
-
-        return 0;
-
-    }
-
-    private static void grepFile( final File file ) {
-
-        long maxCount = maxCount();
         long lineNumber = 0;
         long count = 0;
         long byteOffset = 0;
-        List< String > beforeContext = new LinkedList< String >();
-        List< String > afterContext = new LinkedList< String >();
+        List< String > beforeContextLines = new LinkedList< String >();
+        List< String > afterContextLines = new LinkedList< String >();
 
         // keep it simple for now
         try( BufferedReader bfr = new BufferedReader( new FileReader( file ), 16000 ) ) {
@@ -812,15 +790,15 @@ public class grep {
                 Matcher m = grepPattern.matcher( line );
                 boolean found = m.find();
 
-                if( ( found && !invertMatch() ) ) {
+                if( ( found && !invertMatch ) ) {
                     count++;
-                    if( afterContext() > 0 ) {
-                        afterContext.clear();
+                    if( afterContext > 0 ) {
+                        afterContextLines.clear();
                         bfr.mark( 4000 );
-                        for( int i = 0; i < afterContext(); i++ ) {
+                        for( int i = 0; i < afterContext; i++ ) {
                             String s = bfr.readLine();
                             if( s != null ) {
-                                afterContext.add( s );
+                                afterContextLines.add( s );
                             }
                             else {
                                 break;
@@ -829,20 +807,22 @@ public class grep {
                         bfr.reset();
                     }
                     String match = line;
-                    if( printMatchOnly() ) {
+                    if( printMatchOnly ) {
                         match = m.group();
                     }
-                    printMatch( file, match, lineNumber, count, ( byteOffset + m.start() ), beforeContext, afterContext );
-                    if( printFileNameOnly() ) {
+                    printMatch( file, match, lineNumber, count, ( byteOffset + m.start() ), beforeContextLines,
+                        afterContextLines );
+                    if( printFileNameOnly ) {
                         return;
                     }
                     //
                 }
-                else if( !found && invertMatch() ) {
+                else if( !found && invertMatch ) {
                     count++;
-                    printMatch( file, line, lineNumber, count, ( byteOffset + m.start() ), beforeContext, afterContext );
+                    printMatch( file, line, lineNumber, count, ( byteOffset + m.start() ), beforeContextLines,
+                        afterContextLines );
                     // TODO: this has a slightly different meaning
-                    if( printFileNameOnly() ) {
+                    if( printFileNameOnly ) {
                         return;
                     }
                 }
@@ -854,9 +834,9 @@ public class grep {
                 byteOffset += line.getBytes().length;
                 byteOffset += 1; // TODO: end of line char - what about DOS/Win32?
 
-                beforeContext.add( line );
-                if( beforeContext.size() > beforeContext() ) {
-                    beforeContext.remove( 0 );
+                beforeContextLines.add( line );
+                if( beforeContextLines.size() > beforeContext ) {
+                    beforeContextLines.remove( 0 );
                 }
             }
         }
@@ -866,12 +846,12 @@ public class grep {
 
         if( count == 0 ) {
             // no matches in file
-            if( printFilesWithoutMatch() ) {
+            if( printFilesWithoutMatch ) {
                 printMessage( file.getName() );
             }
         }
 
-        if( printCountOnly() ) {
+        if( printCountOnly ) {
             printMessage( ( file.getName() + ":" + count ) );
         }
 

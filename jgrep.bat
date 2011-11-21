@@ -9,5 +9,8 @@ set COMMONS_LANG_JAR=%COMMONS_LANG_DIR%\%COMMONS_LANG_VER%\commons-lang-%COMMONS
 set COMMONS_COLL_DIR=%M2_REPO%\commons-collections\commons-collections\
 set COMMONS_COLL_VER=3.2.1
 set COMMONS_COLL_JAR=%COMMONS_COLL_DIR%\%COMMONS_COLL_VER%\commons-collections-%COMMONS_COLL_VER%.jar
+set COMMONS_IO_DIR=%M2_REPO%\commons-io\commons-io\
+set COMMONS_IO_VER=2.0.1
+set COMMONS_IO_JAR=%COMMONS_IO_DIR%\%COMMONS_IO_VER%\commons-io-%COMMONS_IO_VER%.jar
 
-java -cp %COMMONS_CLI_JAR%;%COMMONS_LANG_JAR%;%COMMONS_COLL_JAR%;./target/classes org.rip.regex.grep %*
+java -cp %COMMONS_CLI_JAR%;%COMMONS_LANG_JAR%;%COMMONS_COLL_JAR%;%COMMONS_IO_JAR%;./target/classes org.rip.regex.grep %*
