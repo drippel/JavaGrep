@@ -13,8 +13,6 @@ import java.util.regex.PatternSyntaxException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.collections.CollectionUtils;
@@ -24,17 +22,17 @@ import org.apache.commons.lang.StringUtils;
 
 public class grep {
 
-    private static Options grepOptions;
+    public grep() {
 
-    private static CommandLine commandLine;
-
-    private Pattern             grepPattern;
-
-    private String              regex;
-
-    static {
-        grepOptions = createOptions();
+        grepPatterns = new ArrayList< Pattern >();
+        filesToProcess = new ArrayList< File >();
+        excludes = new ArrayList< String >();
+        regexes = new ArrayList< String >();
     }
+
+    private List< Pattern >     grepPatterns;
+
+    private List< String >      regexes;
 
     private List< File >        filesToProcess;
 
@@ -50,13 +48,7 @@ public class grep {
             flags |= Pattern.CASE_INSENSITIVE;
         }
 
-        /*
-         * if( wordRegex && lineRegex ) {
-         * printErrorMessage( "Conflicting options (-w|--word-regexp) && (-x|--line-regexp)" );
-         * return null;
-         * }
-         */
-        // we are overriding line-regex if both are supplied
+        // we are ignoring line-regex if both are supplied
         if( wordRegex ) {
             // poor mans way to do it
             pattern = "\\b" + pattern + "\\b";
@@ -72,93 +64,6 @@ public class grep {
         return Pattern.compile( pattern, flags );
 
     }
-
-    private static Options createOptions() {
-
-        final Options opts = new Options();
-
-        opts.addOption( "E", "extended-regexp", false, "PATTERN is an extended regular expression (ERE)" );
-        opts.addOption( "F", "fixed-strings", false, "PATTERN is a set of newline-separated fixed strings" );
-        opts.addOption( "G", "basic-regexp", false, "PATTERN is a basic regular expression (BRE)" );
-        opts.addOption( "P", "perl-regexp", false, "PATTERN is a Perl regular expression" );
-        opts.addOption( OptionBuilder.withLongOpt( "regexp" ).hasArg().withArgName( "PATTERN" )
-            .withDescription( "use PATTERN for matching" ).create( 'e' ) );
-        opts.addOption( OptionBuilder.withLongOpt( "file" ).hasArg().withArgName( "FILE" )
-            .withDescription( "obtain PATTERN from FILE" ).create( 'f' ) );
-        opts.addOption( "i", "ignore-case", false, "ignore case distinctions" );
-        opts.addOption( "w", "word-regexp", false, "force PATTERN to match only whole words" );
-        opts.addOption( "x", "line-regexp", false, "force PATTERN to match only whole lines" );
-        opts.addOption( "z", "null-data", false, "a data line ends in 0 byte, not newline" );
-        opts.addOption( "s", "no-messages", false, "suppress error messages" );
-        opts.addOption( "v", "invert-match", false, "select non-matching lines" );
-        opts.addOption( "V", "version", false, "print version information and exit" );
-        opts.addOption( OptionBuilder.withLongOpt( "help" ).withDescription( "display this help and exit" ).create() );
-        // opts.addOption( OptionBuilder.withLongOpt( "mmap" ).withDescription(
-        // "ignored for backwards compatibility" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "max-count" ).withArgName( "NUM" ).hasArg()
-            .withDescription( "stop after NUM matches" ).create( 'm' ) );
-        opts.addOption( "b", "byte-offset", false, "print the byte offset with output lines" );
-        opts.addOption( "n", "line-number", false, "print line number with output lines" );
-        opts.addOption( OptionBuilder.withLongOpt( "line-buffered" ).withDescription( "flush output on every line" )
-            .create() );
-        opts.addOption( "H", "with-filename", false, "print the filename for each match" );
-        opts.addOption( "h", "no-filename", false, "suppress the prefixing filename on output" );
-        opts.addOption( OptionBuilder.withLongOpt( "label" ).hasArg().withArgName( "LABEL" )
-            .withDescription( "print LABEL as filename for standard input" ).create() );
-        opts.addOption( "o", "only-matching", false, "show only the part of a line matching PATTERN" );
-        opts.addOption( "q", "quiet", false, "suppress all normal output" );
-        opts.addOption( OptionBuilder.withLongOpt( "silent" ).withDescription( "suppress all normal output" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "binary-files" ).hasArg().withArgName( "TYPE" )
-            .withDescription( "assume that binary files are TYPE" ).create() );
-        // TYPE is `binary', `text', or `without-match'
-        opts.addOption( "a", "text", false, "equivalent to --binary-files=text" );
-        opts.addOption( "I", false, "equivalent to --binary-files=without-match" );
-        opts.addOption( OptionBuilder.withLongOpt( "directories" ).hasArg().withArgName( "ACTION" )
-            .withDescription( "how to handle directories" ).create( 'd' ) );
-        // ACTION is `read', `recurse', or `skip'"
-        opts.addOption( OptionBuilder.withLongOpt( "devices" ).hasArg().withArgName( "ACTION" )
-            .withDescription( "how to handle devices, FIFOs and sockets" ).create( 'D' ) );
-        // ACTION is `read' or `skip'
-        opts.addOption( "R", false, "equivalent to --directories=recurse" );
-        opts.addOption( "r", "recursive", false, "equivalent to --directories=recurse" );
-        opts.addOption( OptionBuilder.withLongOpt( "include" ).hasArg().withArgName( "FILE_PATTERN" )
-            .withDescription( "search only files that match FILE_PATTERN" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "exclude" ).hasArg().withArgName( "FILE_PATTERN" )
-            .withDescription( "skip files and directories matching FILE_PATTERN" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "exclude-from" ).hasArg().withArgName( "FILE" )
-            .withDescription( "skip files matching any file pattern from FILE" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "exclude-dir" ).hasArg().withArgName( "PATTERN" )
-            .withDescription( "directories that match PATTERN will be skipped" ).create() );
-        opts.addOption( "L", "files-without-match", false, "print only names of FILEs containing no match" );
-        opts.addOption( "l", "files-with-matches", false, "print only names of FILEs containing matches" );
-        opts.addOption( "c", "count", false, "print only a count of matching lines per FILE" );
-        opts.addOption( "T", "initial-tab", false, "make tabs line up (if needed)" );
-        opts.addOption( "Z", "null", false, "print 0 byte after FILE name" );
-        opts.addOption( OptionBuilder.withLongOpt( "before-context" ).hasArg().withArgName( "NUM" )
-            .withDescription( "print NUM lines of leading context" ).create( 'B' ) );
-        opts.addOption( OptionBuilder.withLongOpt( "after-context" ).hasArg().withArgName( "NUM" )
-            .withDescription( "print NUM lines of trailing context" ).create( 'A' ) );
-        opts.addOption( OptionBuilder.withLongOpt( "contex" ).hasArg().withArgName( "NUM" )
-            .withDescription( "print NUM lines of output context" ).create( 'C' ) );
-        // * + "		  -NUM                      same as --context=NUM\n" +
-        opts.addOption( OptionBuilder.withLongOpt( "color" ).hasOptionalArg().withArgName( "WHEN" )
-            .withDescription( "use markers to highlight the matching strings" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "colour" ).hasOptionalArg().withArgName( "WHEN" )
-            .withDescription( "use markers to highlight the matching strings" ).create() );
-        // *
-        // "		                            WHEN is `always', `never', or `auto'\n"
-        opts.addOption( "U", "binary", false, "do not strip CR characters at EOL (MSDOS)" );
-        opts.addOption( "u", "unix-byte-offsets", false, "report offsets as if CRs were not there (MSDOS)" );
-
-        opts.addOption( OptionBuilder.withLongOpt( "debug" ).withDescription( "turn on debugging output" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "verbose" ).withDescription( "turn on verbose output" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "test" ).withDescription( "run in test mode" ).create() );
-        opts.addOption( OptionBuilder.withLongOpt( "logging" ).withDescription( "use nice logging, Log4J/SLF4J" )
-            .create() );
-
-        return opts;
-    }
-
 
 
     private void printMessage( final String msg ) {
@@ -177,8 +82,6 @@ public class grep {
         }
 
     }
-
-
 
     private void transferOptions( final CommandLine commandLine ) {
 
@@ -248,7 +151,7 @@ public class grep {
 
         // this could be specified multiple times
         if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
-            regex = commandLine.getOptionValue( commandLine.getOptionValue( 'e' ) );
+            regexes.add( commandLine.getOptionValue( 'e' ) );
         }
 
         if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
@@ -336,96 +239,115 @@ public class grep {
     public static void main( final String[] args ) {
 
         grep theGrep = new grep();
+        grepCommandLine cmd = new grepCommandLine();
 
         if( ArrayUtils.isEmpty( args ) ) {
-            usage();
+            grepCommandLine.usage();
             return;
         }
 
         // parse the command line
         try {
             final CommandLineParser parser = new PosixParser();
-            commandLine = parser.parse( grepOptions, args );
+            cmd.setCommandLine( parser.parse( grepCommandLine.grepOptions, args ) );
         }
         catch( final ParseException pe ) {
             System.out.print( pe.getMessage() );
-            usage();
+            grepCommandLine.usage();
             return;
         }
 
-        theGrep.transferOptions( commandLine );
+        theGrep.transferOptions( cmd.getCommandLine() );
 
         // if version or help was given then print and quit
-        if( commandLine.hasOption( "help" ) ) {
-            usage();
+        if( cmd.getCommandLine().hasOption( "help" ) ) {
+            grepCommandLine.usage();
             return;
         }
 
-        if( commandLine.hasOption( "version" ) || commandLine.hasOption( 'V' ) ) {
-            version();
+        if( cmd.getCommandLine().hasOption( "version" ) || cmd.getCommandLine().hasOption( 'V' ) ) {
+            grepCommandLine.version();
             return;
         }
 
         //
-        if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
-            if( ArrayUtils.isEmpty( commandLine.getOptionValues( 'e' ) ) ) {
-                usage();
+        if( cmd.getCommandLine().hasOption( 'e' ) || cmd.getCommandLine().hasOption( "regexp" ) ) {
+            if( ArrayUtils.isEmpty( cmd.getCommandLine().getOptionValues( 'e' ) ) ) {
+                grepCommandLine.usage();
                 return;
             }
         }
 
-        if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
-            if( ArrayUtils.isEmpty( commandLine.getOptionValues( 'f' ) ) ) {
-                usage();
+        if( cmd.getCommandLine().hasOption( 'f' ) || cmd.getCommandLine().hasOption( "file" ) ) {
+            if( ArrayUtils.isEmpty( cmd.getCommandLine().getOptionValues( 'f' ) ) ) {
+                grepCommandLine.usage();
                 return;
             }
         }
 
-        if( commandLine.hasOption( "exclude-from" ) ) {
-            String s = commandLine.getOptionValue( "exclude-from" );
+        if( cmd.getCommandLine().hasOption( "exclude-from" ) ) {
+            String s = cmd.getCommandLine().getOptionValue( "exclude-from" );
             if( StringUtils.isEmpty( s ) ) {
-                usage();
+                grepCommandLine.usage();
                 return;
             }
         }
 
         // get the unprocessed items
-        final List argList = commandLine.getArgList();
+        final List argList = cmd.getCommandLine().getArgList();
 
         // we must have some args besides options
         if( CollectionUtils.isEmpty( argList ) ) {
-            usage();
+            // TODO - regex could be passed from file or arg
+            // input could be from STDIN
+            grepCommandLine.usage();
             return;
         }
 
         // just to get things started
         // we are assuming: [OPTION]... PATTERN [FILE]...
         // options are pulled out by the command line processor
+        // if the regex was not supplied via file or arg
+        // we assume its the first arg
+        // if the regex was set via arg or file
+        // we assume the first arg is a file
         int fileOffset = 0;
-        if( StringUtils.isEmpty( theGrep.regex ) ) {
-            theGrep.regex = (String)argList.get( 0 );
+        if( CollectionUtils.isEmpty( theGrep.regexes ) ) {
+            theGrep.regexes.add( (String)argList.get( 0 ) );
             fileOffset++;
         }
 
         // make sure its a good regex
         try {
-            theGrep.grepPattern = theGrep.compilePattern( theGrep.regex );
+            theGrep.compilePatterns();
         }
         catch( final PatternSyntaxException pse ) {
-            theGrep.printErrorMessage( "invalid regex syntax\nregex:" + theGrep.regex + "\n" + pse.getMessage() );
+            theGrep.printErrorMessage( "invalid regex syntax\n" + pse.getMessage() );
             return;
         }
 
-        if( theGrep.grepPattern == null ) {
+        if( CollectionUtils.isEmpty( theGrep.grepPatterns ) ) {
+            grepCommandLine.usage();
             return;
         }
 
         // just to get things going
-        theGrep.processFileArgs( argList.subList( fileOffset, argList.size() ) );
+        List< String > files = argList.subList( fileOffset, argList.size() );
+        if( files.size() > 0 ) {
+            theGrep.printFileName = true;
+        }
+        theGrep.processFileArgs( files );
 
         // ok lets start
         theGrep.grepFiles();
 
+    }
+
+    private void compilePatterns() {
+
+        for( String s : regexes ) {
+            grepPatterns.add( compilePattern( s ) );
+        }
     }
 
     private void readExcludeFrom( final String val ) {
@@ -501,7 +423,7 @@ public class grep {
             return;
         }
 
-        if( printFileName && ( filesToProcess.size() > 1 ) ) {
+        if( printFileName ) {
             try {
                 msg += file.getCanonicalPath() + ":";
             }
@@ -599,7 +521,7 @@ public class grep {
 
 
     private void readRegexFromFile( final String fname ) {
-        String val = null;
+
 
         File file = new File( fname );
         if( file.exists() && file.isFile() ) {
@@ -608,7 +530,7 @@ public class grep {
 
                 String line = br.readLine();
                 if( StringUtils.isNotBlank( line ) ) {
-                    val = line ;
+                    regexes.add( line );
                 }
 
             }
@@ -617,101 +539,22 @@ public class grep {
             }
         }
 
-        regex = val;
+
     }
 
     private void reset() {
 
-        commandLine = null;
-        grepPattern = null;
-        regex = null;
+        grepPatterns = new ArrayList< Pattern >();
+        regexes = new ArrayList< String >();
         filesToProcess = null;
         excludes = null;
 
 
     }
 
-    public static void usage() {
 
-        final String msg =
-            "Usage: grep [OPTION]... PATTERN [FILE]...\n" + "Search for PATTERN in each FILE or standard input.\n"
-                + "PATTERN is, by default, a basic regular expression (BRE).\n"
-                + "Example: grep -i 'hello world' menu.h main.c\n"
-                + "Regexp selection and interpretation:\n"
-                + "        -E, --extended-regexp     PATTERN is an extended regular expression (ERE)\n"     // no
-                + "        -F, --fixed-strings       PATTERN is a set of newline-separated fixed strings\n" // no
-                + "		  -G, --basic-regexp        PATTERN is a basic regular expression (BRE)\n"          // no
-                + "		  -P, --perl-regexp         PATTERN is a Perl regular expression\n"                 // no
-                + "		  -e, --regexp=PATTERN      use PATTERN for matching\n"                // done
-                + "		  -f, --file=FILE           obtain PATTERN from FILE\n"                // done
-                + "		  -i, --ignore-case         ignore case distinctions\n"                // done
-                + "		  -w, --word-regexp         force PATTERN to match only whole words\n"     // done
-                + "		  -x, --line-regexp         force PATTERN to match only whole lines\n"     // done
-                + "		  -z, --null-data           a data line ends in 0 byte, not newline\n"     // yes?
-                + "Miscellaneous:\n"
-                + "		  -s, --no-messages         suppress error messages\n"                     // done
-                + "		  -v, --invert-match        select non-matching lines\n"                   // done
-                + "		  -V, --version             print version information and exit\n"          // done
-                + "		      --help                display this help and exit\n"                  // done
-                // +
-                + "		      --mmap                ignored for backwards compatibility\n" // no
-                + "Output control:\n"
-                + "		  -m, --max-count=NUM       stop after NUM matches\n"                      // done - max-total
-                + "		  -b, --byte-offset         print the byte offset with output lines\n"     // done
-                + "		  -n, --line-number         print line number with output lines\n"         // done
-                + "		      --line-buffered       flush output on every line\n"                  // yes
-                + "		  -H, --with-filename       print the filename for each match\n"           // done
-                + "		  -h, --no-filename         suppress the prefixing filename on output\n"   // done
-                + "		      --label=LABEL         print LABEL as filename for standard input\n"  // yes?
-                + "		  -o, --only-matching       show only the part of a line matching PATTERN\n"   // done
-                + "		  -q, --quiet, --silent     suppress all normal output\n"                      // done
-                + "		      --binary-files=TYPE   assume that binary files are TYPE;\n"              // yes?
-                + "		                            TYPE is `binary', `text', or `without-match'\n"
-                + "		  -a, --text                equivalent to --binary-files=text\n"               // yes?
-                + "		  -I                        equivalent to --binary-files=without-match\n"      // yes?
-                + "		  -d, --directories=ACTION  how to handle directories;\n"                      // done
-                + "		                            ACTION is `read', `recurse', or `skip'\n"
-                + "		  -D, --devices=ACTION      how to handle devices, FIFOs and sockets;\n"       // no
-                + "		                            ACTION is `read' or `skip'\n"
-                + "		  -R, -r, --recursive       equivalent to --directories=recurse\n"             // done
-                + "		      --include=FILE_PATTERN  search only files that match FILE_PATTERN\n"     // done
-                + "		      --exclude=FILE_PATTERN  skip files and directories matching FILE_PATTERN\n"  // done
-                + "		      --exclude-from=FILE   skip files matching any file pattern from FILE\n"      // done
-                + "		      --exclude-dir=PATTERN  directories that match PATTERN will be skipped.\n"    // done
-                + "		  -L, --files-without-match  print only names of FILEs containing no match\n"      // done
-                + "		  -l, --files-with-matches  print only names of FILEs containing matches\n"        // done
-                + "		  -c, --count               print only a count of matching lines per FILE\n"       // done
-                + "		  -T, --initial-tab         make tabs line up (if needed)\n"                       // no
-                + "		  -Z, --null                print 0 byte after FILE name\n"                        // no - use --sep=CHAR
-                + "Context control:\n"
-                + "		  -B, --before-context=NUM  print NUM lines of leading context\n"                  // done
-                + "		  -A, --after-context=NUM   print NUM lines of trailing context\n"                 // done
-                + "		  -C, --context=NUM         print NUM lines of output context\n"                   // done
-                + "		  -NUM                      same as --context=NUM\n"                               // no
-                + "		      --color[=WHEN],\n"                                                           // no
-                + "		      --colour[=WHEN]       use markers to highlight the matching strings;\n"      // no
-                + "		                            WHEN is `always', `never', or `auto'\n"
-                + "		  -U, --binary              do not strip CR characters at EOL (MSDOS)\n"           // no?
-                + "		  -u, --unix-byte-offsets   report offsets as if CRs were not there (MSDOS)\n"     // no?
-                + "\n"
-                + "		`egrep' means `grep -E'.  `fgrep' means `grep -F'.\n"
-                + "		Direct invocation as either `egrep' or `fgrep' is deprecated.\n"
-                + "		With no FILE, or when FILE is -, read standard input.  If less than two FILEs\n"
-                + "		are given, assume -h.  Exit status is 0 if any line was selected, 1 otherwise;\n"
-                + "		if any error occurs and -q was not given, the exit status is 2.\n"
-                + "\n"
-                + "		Report bugs to: bug-grep@gnu.org\n"
-                + "		GNU Grep home page: <http://www.gnu.org/software/grep/>\n"
-                + "		General help using GNU software: <http://www.gnu.org/gethelp/>\n";
-        System.out.print( msg );
 
-    }
 
-    private static void version() {
-
-        System.out.println("Java Grep 0.1");
-
-    }
 
     public boolean includeFile( final File f ) {
 
@@ -770,7 +613,18 @@ public class grep {
 
     private long afterContext = 0;
 
+    private Matcher matchAny( final String line ) {
 
+        for( Pattern pat : grepPatterns ) {
+
+            Matcher m = pat.matcher( line );
+            if( m.find() ) {
+                return m;
+            }
+        }
+
+        return null;
+    }
 
     private void grepFile( final File file ) {
 
@@ -787,10 +641,9 @@ public class grep {
             for( String line = bfr.readLine(); line != null; line = bfr.readLine() ) {
 
                 lineNumber++;
-                Matcher m = grepPattern.matcher( line );
-                boolean found = m.find();
+                Matcher m = matchAny( line );
 
-                if( ( found && !invertMatch ) ) {
+                if( ( ( m != null ) && !invertMatch ) ) {
                     count++;
                     if( afterContext > 0 ) {
                         afterContextLines.clear();
@@ -817,9 +670,9 @@ public class grep {
                     }
                     //
                 }
-                else if( !found && invertMatch ) {
+                else if( ( m == null ) && invertMatch ) {
                     count++;
-                    printMatch( file, line, lineNumber, count, ( byteOffset + m.start() ), beforeContextLines,
+                    printMatch( file, line, lineNumber, count, byteOffset, beforeContextLines,
                         afterContextLines );
                     // TODO: this has a slightly different meaning
                     if( printFileNameOnly ) {
@@ -855,5 +708,10 @@ public class grep {
             printMessage( ( file.getName() + ":" + count ) );
         }
 
+    }
+
+    private boolean isRegexSet() {
+
+        return CollectionUtils.isNotEmpty( regexes );
     }
 }
