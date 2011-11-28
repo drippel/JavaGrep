@@ -112,7 +112,9 @@ public class grepCommandLine {
         opts.addOption( OptionBuilder.withLongOpt( "logging" ).withDescription( "use nice logging, Log4J/SLF4J" )
             .create() );
         opts.addOption( OptionBuilder.withLongOpt( "file-long" ).hasArg().withArgName( "FILE" )
-            .withDescription( "read PATTERN from file using long format" ).create() );
+            .withDescription( "read patterns from FILE using long format" ).create() );
+        opts.addOption( OptionBuilder.withLongOpt( "include-from" ).hasArg().withArgName( "PATTERN" )
+            .withDescription( "include files matching patterns from FILE" ).create() );
 
         return opts;
     }

@@ -1,0 +1,8 @@
+\b
+  # Capture the address to $1 ...
+  (
+    \w[-.\w]* # username 
+    @
+    [-\w]+(\.[-\w]+)*\.(com|edu|info) # hostname
+    )
+\b

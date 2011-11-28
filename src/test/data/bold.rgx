@@ -1,0 +1,9 @@
+<B>
+    (                    # Now, as many of the following as possible ...
+      (?! < /?B> ) #    If not <B>, and not </B> ...
+    .                    #          ... any character is okay
+    )*                   # (now greedy)
+    </B> # <ANNO> ... until the closing delimiter can match.
+
+
+

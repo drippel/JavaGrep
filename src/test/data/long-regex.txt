@@ -1,0 +1,10 @@
+\G(?:^|,) 
+  (?:
+    # Either a double-quoted field ...      
+    \" # field's opening quote 
+    ( [^\"]*+ (?: \"\" [^\"]*+ )*+ )
+    \" #field's closing quote
+    | # ... or ... 
+    # some non-quote/non-comma text ...    
+    ([^\",]*+) 
+  )

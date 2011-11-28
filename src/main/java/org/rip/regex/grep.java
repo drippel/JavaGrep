@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -16,6 +17,8 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.Predicate;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
@@ -26,21 +29,21 @@ public class grep {
 
         grepPatterns = new ArrayList< Pattern >();
         filesToProcess = new ArrayList< File >();
-        excludes = new ArrayList< String >();
+
         regexes = new ArrayList< String >();
     }
 
     private List< Pattern >     grepPatterns;
 
-    private List< String >      regexes;
+    private List< String >  regexes;
 
     private List< File >        filesToProcess;
 
-    private ArrayList< String > excludes;
+
 
     public Pattern compilePattern( final String pat ) {
 
-        int flags = 0;
+        int flags = Pattern.COMMENTS;
 
         String pattern = new String( pat );
 
@@ -85,13 +88,115 @@ public class grep {
 
     private void transferOptions( final CommandLine commandLine ) {
 
+        // Regexp selection and interpretation
+
+        if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
+            regexes.addAll( Arrays.asList( commandLine.getOptionValues( 'e' ) ) );
+        }
+
+        if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
+            readRegexFromFile( commandLine.getOptionValues( 'f' ) );
+        }
+
+        if( commandLine.hasOption( "file-long" ) ) {
+            readLongRegexFromFile( commandLine.getOptionValues( "file-long" ) );
+        }
+
+        ignoreCase = ( commandLine.hasOption( 'i' ) || commandLine.hasOption( "ignore-case" ) );
+
+        wordRegex = commandLine.hasOption( 'w' ) || commandLine.hasOption( "word-regexp" );
+
+        lineRegex = commandLine.hasOption( 'x' ) || commandLine.hasOption( "line-regexp" );
+
+        // Miscellaneous
+
+        noMessages = commandLine.hasOption( 's' ) || commandLine.hasOption( "no-messages" );
+
+        invertMatch = ( commandLine.hasOption( 'v' ) || commandLine.hasOption( "invert-match" ) );
+
+        // Output control
+        maxCount = 0;
+        if( commandLine.hasOption( 'm' ) || commandLine.hasOption( "max-count" ) ) {
+            String s = commandLine.getOptionValue( 'm' );
+            maxCount = Long.parseLong( s );
+        }
+
+        printByteOffset = ( commandLine.hasOption( 'b' ) || commandLine.hasOption( "byte-offset" ) );
+
+        printLineNumber = commandLine.hasOption( 'n' ) || commandLine.hasOption( "line-number" );
+
+        printFileName = false;
+        if( ( commandLine.hasOption( 'H' ) || commandLine.hasOption( "with-filename" ) ) ) {
+            printFileName = true;
+        }
+
+        if( ( commandLine.hasOption( 'h' ) || commandLine.hasOption( "no-filename" ) ) ) {
+            printFileName = false;
+        }
+
+        printMatchOnly = commandLine.hasOption( 'o' ) || commandLine.hasOption( "only-matching" );
+
+        quiet =
+            ( commandLine.hasOption( 'q' ) || commandLine.hasOption( "--quiet" ) || commandLine.hasOption( "silent" ) );
+
+        recurseDirectories = false;
+        skipDirectories = false;
+        if( commandLine.hasOption( 'd' ) || commandLine.hasOption( "directories" ) ) {
+            String val = commandLine.getOptionValue( 'd' );
+            if( StringUtils.endsWithIgnoreCase( val, "recurse" ) ) {
+                recurseDirectories = true;
+            }
+            if( StringUtils.endsWithIgnoreCase( val, "skip" ) ) {
+                skipDirectories = true;
+            }
+        }
+
+        if( commandLine.hasOption( 'R' )
+            || commandLine.hasOption( 'r' )
+            || commandLine.hasOption( "recursive" ) ) {
+            recurseDirectories = true;
+        }
+
+        useInclude = false;
+        useExclude = false;
+        if( commandLine.hasOption( "include" ) ) {
+            useInclude = true;
+            includeFilePatterns.addAll( Arrays.asList( commandLine.getOptionValues( "include" ) ) );
+        }
+
+        if( commandLine.hasOption( "include-from" ) ) {
+            useInclude = true;
+            readIncludesFrom( commandLine.getOptionValues( "include-from" ) );
+        }
+
+        if( commandLine.hasOption( "exclude" ) ) {
+            useExclude = true;
+            excludeFilePatterns.addAll( Arrays.asList( commandLine.getOptionValues( "exclude" ) ) );
+        }
+
+        if( commandLine.hasOption( "exclude-from" ) ) {
+            useExclude = true;
+            readExcludeFrom( commandLine.getOptionValues( "exclude-from" ) );
+        }
+
+        if( commandLine.hasOption( "exclude-dir" ) ) {
+            excludeDirPatterns.addAll( Arrays.asList( commandLine.getOptionValues( "exclude-dir" ) ) );
+        }
+
+        printFilesWithoutMatch = commandLine.hasOption( 'L' ) || commandLine.hasOption( "files-without-match" );
+
+        printFileNameOnly = ( commandLine.hasOption( 'l' ) || commandLine.hasOption( "files-with-matches" ) );
+
+        printCountOnly = ( commandLine.hasOption( 'c' ) || commandLine.hasOption( "count" ) );
+
+        // Context control
+
         long context = 0;
 
         if( commandLine.hasOption( 'C' ) || commandLine.hasOption( "context" ) ) {
             String s = commandLine.getOptionValue( 'C' );
             context = Long.parseLong( s );
         }
-
 
         if( commandLine.hasOption( 'A' ) || commandLine.hasOption( "after-context" ) ) {
             String s = commandLine.getOptionValue( 'A' );
@@ -109,132 +214,49 @@ public class grep {
             beforeContext = context;
         }
 
-        if( commandLine.hasOption( 'i' ) || commandLine.hasOption( "ignore-case" ) ) {
-            ignoreCase = true;
-        }
-
-        if( commandLine.hasOption( 'v' ) || commandLine.hasOption( "invert-match" ) ) {
-            invertMatch = true;
-        }
-
-        maxCount = 0;
-        if( commandLine.hasOption( 'm' ) || commandLine.hasOption( "max-count" ) ) {
-            String s = commandLine.getOptionValue( 'm' );
-            maxCount = Long.parseLong( s );
-        }
-
-        if( commandLine.hasOption( 'l' ) || commandLine.hasOption( "files-with-matches" ) ) {
-            printFileNameOnly = true;
-        }
-
-        if( commandLine.hasOption( 'b' ) || commandLine.hasOption( "byte-offset" ) ) {
-            printByteOffset = true;
-        }
-
-        if( commandLine.hasOption( 'q' ) || commandLine.hasOption( "--quiet" ) || commandLine.hasOption( "silent" ) ) {
-            quiet = true;
-        }
-
-        if( commandLine.hasOption( 'c' ) || commandLine.hasOption( "count" ) ) {
-            printCountOnly = true;
-        }
-
-        printFilesWithoutMatch = commandLine.hasOption( 'L' ) || commandLine.hasOption( "files-without-match" );
-
-        wordRegex = commandLine.hasOption( 'w' ) || commandLine.hasOption( "word-regexp" );
-
-        lineRegex = commandLine.hasOption( 'x' ) || commandLine.hasOption( "line-regexp" );
-
-        if( commandLine.hasOption( "exclude-from" ) ) {
-            readExcludeFrom( commandLine.getOptionValue( "exclude-from" ) );
-        }
-
-        // this could be specified multiple times
-        if( commandLine.hasOption( 'e' ) || commandLine.hasOption( "regexp" ) ) {
-            regexes.add( commandLine.getOptionValue( 'e' ) );
-        }
-
-        if( commandLine.hasOption( 'f' ) || commandLine.hasOption( "file" ) ) {
-            readRegexFromFile( commandLine.getOptionValue( 'f' ) );
-        }
-
-        noMessages = commandLine.hasOption( 's' ) || commandLine.hasOption( "no-messages" );
-
-        if( commandLine.hasOption( 'H' ) || commandLine.hasOption( "with-filename" ) ) {
-            printFileName = true;
-        }
-
-        if( commandLine.hasOption( 'h' ) || commandLine.hasOption( "no-filename" ) ) {
-            printFileName = false;
-        }
-
-        printMatchOnly = commandLine.hasOption( 'o' ) || commandLine.hasOption( "only-matching" );
-
-        printLineNumber = commandLine.hasOption( 'n' ) || commandLine.hasOption( "line-number" );
-
-        recurseDirectories = false;
-
-        if( commandLine.hasOption( 'd' ) || commandLine.hasOption( "directories" ) ) {
-
-            String val = commandLine.getOptionValue( 'd' );
-            if( StringUtils.endsWithIgnoreCase( val, "recurse" ) ) {
-                recurseDirectories = true;
-            }
-
-        }
-
-        if( commandLine.hasOption( 'R' )
-            || commandLine.hasOption( 'r' )
-            || commandLine.hasOption( "recursive" ) ) {
-            recurseDirectories = true;
-        }
-
-        if( commandLine.hasOption( "include" ) ) {
-            includeFilePattern = commandLine.getOptionValue( "include" );
-        }
-
-        if( commandLine.hasOption( "exclude" ) ) {
-            excludeFilePattern = commandLine.getOptionValue( "exclude" );
-        }
-
-        if( commandLine.hasOption( "exclude-dir" ) ) {
-            excludeDirPattern = commandLine.getOptionValue( "exclude-dir" );
-        }
-
     }
 
-    private boolean invertMatch = false;
-    private boolean ignoreCase = false;
-    private long    maxCount;
+    boolean                      invertMatch            = false;
 
-    private boolean printFileNameOnly = false;
+    boolean                      ignoreCase             = false;
 
-    private boolean printByteOffset   = false;
+    long                         maxCount               = 0;
 
-    private boolean quiet             = false;
+    boolean              printFileNameOnly      = false;
 
-    private boolean printCountOnly    = false;
+    boolean                      printByteOffset        = false;
 
-    private boolean printFilesWithoutMatch = false;
+    boolean                      quiet                  = false;
 
-    private boolean wordRegex              = false;
+    boolean              printCountOnly         = false;
 
-    private boolean lineRegex              = false;
+    boolean              printFilesWithoutMatch = false;
 
-    private boolean noMessages             = false;
+    boolean                      wordRegex              = false;
 
-    private boolean printFileName          = true;
+    boolean                      lineRegex              = false;
 
-    private boolean printMatchOnly         = false;
-    private boolean printLineNumber=false;
+    boolean                      noMessages             = false;
 
-    private boolean recurseDirectories     = false;
+    boolean                      printFileName          = false;
 
-    private String  includeFilePattern     = null;
+    boolean                      printMatchOnly         = false;
 
-    private String  excludeFilePattern     = null;
+    boolean                      printLineNumber        = false;
 
-    private String  excludeDirPattern      = null;
+    boolean                      recurseDirectories     = false;
+
+    boolean                      skipDirectories        = false;
+
+    final List< String >         includeFilePatterns    = new ArrayList< String >();
+
+    List< String >               excludeFilePatterns    = new ArrayList< String >();
+
+    final List< String > excludeDirPatterns     = new ArrayList< String >();
+
+    boolean                      useInclude             = false;
+
+    boolean                      useExclude             = false;
 
     public static void main( final String[] args ) {
 
@@ -270,29 +292,6 @@ public class grep {
             return;
         }
 
-        //
-        if( cmd.getCommandLine().hasOption( 'e' ) || cmd.getCommandLine().hasOption( "regexp" ) ) {
-            if( ArrayUtils.isEmpty( cmd.getCommandLine().getOptionValues( 'e' ) ) ) {
-                grepCommandLine.usage();
-                return;
-            }
-        }
-
-        if( cmd.getCommandLine().hasOption( 'f' ) || cmd.getCommandLine().hasOption( "file" ) ) {
-            if( ArrayUtils.isEmpty( cmd.getCommandLine().getOptionValues( 'f' ) ) ) {
-                grepCommandLine.usage();
-                return;
-            }
-        }
-
-        if( cmd.getCommandLine().hasOption( "exclude-from" ) ) {
-            String s = cmd.getCommandLine().getOptionValue( "exclude-from" );
-            if( StringUtils.isEmpty( s ) ) {
-                grepCommandLine.usage();
-                return;
-            }
-        }
-
         // get the unprocessed items
         final List argList = cmd.getCommandLine().getArgList();
 
@@ -313,7 +312,7 @@ public class grep {
         // we assume the first arg is a file
         int fileOffset = 0;
         if( CollectionUtils.isEmpty( theGrep.regexes ) ) {
-            theGrep.regexes.add( (String)argList.get( 0 ) );
+            theGrep.addRegex( (String)argList.get( 0 ) );
             fileOffset++;
         }
 
@@ -333,7 +332,7 @@ public class grep {
 
         // just to get things going
         List< String > files = argList.subList( fileOffset, argList.size() );
-        if( files.size() > 0 ) {
+        if( files.size() > 1 ) {
             theGrep.printFileName = true;
         }
         theGrep.processFileArgs( files );
@@ -343,27 +342,45 @@ public class grep {
 
     }
 
-    private void compilePatterns() {
+    protected void compilePatterns() {
 
         for( String s : regexes ) {
             grepPatterns.add( compilePattern( s ) );
         }
     }
 
-    private void readExcludeFrom( final String val ) {
+    void readExcludeFrom( final String vals[] ) {
 
+        for( String val : vals ) {
+            try( BufferedReader br = new BufferedReader( new FileReader( new File( val ) ) ) ) {
 
-        try( BufferedReader br = new BufferedReader( new FileReader( new File( val ) ) ) ) {
-            excludes = new ArrayList< String >();
+                for( String line = br.readLine(); line != null; line = br.readLine() ) {
+                    excludeFilePatterns.add( line );
+                }
 
-            for( String line = br.readLine(); line != null; line = br.readLine() ) {
-                excludes.add( line );
             }
-
+            catch( IOException e ) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
         }
-        catch( IOException e ) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+
+    }
+
+    void readIncludesFrom( final String vals[] ) {
+
+        for( String val : vals ) {
+            try( BufferedReader br = new BufferedReader( new FileReader( new File( val ) ) ) ) {
+
+                for( String line = br.readLine(); line != null; line = br.readLine() ) {
+                    includeFilePatterns.add( line );
+                }
+
+            }
+            catch( IOException e ) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
         }
 
     }
@@ -491,6 +508,33 @@ public class grep {
 
     }
 
+    public void verifyFileList() {
+
+        List< File > list = filesToProcess;
+        filesToProcess = new ArrayList< File >();
+
+        for( final Object o : list ) {
+
+            final File f = (File)o;
+
+            if( f.exists() ) {
+                if( f.isFile() ) {
+                    if( includeFile( f ) ) {
+                        if( !excludeFile( f ) ) {
+                            filesToProcess.add( f );
+                        }
+                    }
+                }
+                else if( f.isDirectory() ) {
+                    if( recurseDirectories ) {
+                        filesToProcess.addAll( recurseDir( f ) );
+                    }
+                }
+            }
+        }
+
+    }
+
     private List< File > recurseDir( final File dir ) {
 
         List< File > files = new ArrayList< File >();
@@ -520,25 +564,43 @@ public class grep {
 
 
 
-    private void readRegexFromFile( final String fname ) {
+    void readRegexFromFile( final String... fnames ) {
 
+        for( String fname : fnames ) {
 
-        File file = new File( fname );
-        if( file.exists() && file.isFile() ) {
+            File file = new File( fname );
+            if( file.exists() && file.isFile() ) {
 
-            try( BufferedReader br = new BufferedReader( new FileReader( file ) ) ) {
+                try {
 
-                String line = br.readLine();
-                if( StringUtils.isNotBlank( line ) ) {
-                    regexes.add( line );
+                    regexes.addAll( FileUtils.readLines( file ) );
+                }
+                catch( IOException io ) {
+                    // TODO - what to do here
                 }
 
             }
-            catch( IOException e ) {
-                printErrorMessage( "Cannot open file:" + fname );
-            }
         }
 
+
+    }
+
+    void readLongRegexFromFile( final String[] fnames ) {
+
+        for( String fname : fnames ) {
+
+            File file = new File( fname );
+            if( file.exists() && file.isFile() ) {
+
+                try {
+                    regexes.add( FileUtils.readFileToString( file ) );
+                }
+                catch( IOException io ) {
+                    // TODO - what to do here
+                }
+
+            }
+        }
 
     }
 
@@ -547,43 +609,52 @@ public class grep {
         grepPatterns = new ArrayList< Pattern >();
         regexes = new ArrayList< String >();
         filesToProcess = null;
-        excludes = null;
-
+        excludeFilePatterns = new ArrayList< String >();
 
     }
 
+
+
+
+    public static Predicate wildcardMatcher( final File file ) {
+
+        return new Predicate() {
+
+            @Override
+            public boolean evaluate( final Object object ) {
+
+                String pattern = (String)object;
+                String nm = FilenameUtils.getName( file.getName() );
+                return FilenameUtils.wildcardMatch( nm, pattern );
+            }
+
+        };
+    }
 
 
 
 
     public boolean includeFile( final File f ) {
 
-        if( StringUtils.isNotEmpty( includeFilePattern ) ) {
-
-            String nm = FilenameUtils.getName( f.getName() );
-            return FilenameUtils.wildcardMatch( nm, includeFilePattern );
-
+        if( !useInclude ) {
+            return true;
         }
 
-        return true;
+        if( CollectionUtils.exists( includeFilePatterns, wildcardMatcher( f ) ) ) {
+            return true;
+        }
+
+        return false;
     }
 
     public boolean excludeFile( final File f ) {
 
-        if( StringUtils.isNotBlank( excludeFilePattern ) ) {
-
-            String nm = FilenameUtils.getName( f.getName() );
-            return FilenameUtils.wildcardMatch( nm, excludeFilePattern );
+        if( !useExclude ) {
+            return false;
         }
 
-        if( CollectionUtils.isNotEmpty( excludes ) ) {
-            for( String pat : excludes ) {
-                String nm = FilenameUtils.getName( f.getName() );
-                boolean ex = FilenameUtils.wildcardMatch( nm, pat );
-                if( ex ) {
-                    return true;
-                }
-            }
+        if( CollectionUtils.exists( excludeFilePatterns, wildcardMatcher( f ) ) ) {
+            return true;
         }
 
         return false ;
@@ -592,10 +663,8 @@ public class grep {
 
     private boolean excludeDir( final File f ) {
 
-        if( StringUtils.isNotBlank( excludeDirPattern ) ) {
-            if( FilenameUtils.wildcardMatch( FilenameUtils.getName( f.getName() ), excludeDirPattern ) ) {
-                return true;
-            }
+        if( CollectionUtils.exists( excludeDirPatterns, wildcardMatcher( f ) ) ) {
+            return true;
         }
 
         return false;
@@ -609,9 +678,9 @@ public class grep {
 
 
 
-    private long beforeContext = 0;
+    long beforeContext = 0;
 
-    private long afterContext = 0;
+    long         afterContext  = 0;
 
     private Matcher matchAny( final String line ) {
 
@@ -713,5 +782,20 @@ public class grep {
     private boolean isRegexSet() {
 
         return CollectionUtils.isNotEmpty( regexes );
+    }
+
+    public void addRegex( final String r ) {
+
+        regexes.add( r );
+    }
+
+    public void addFile( final String name ) {
+
+        filesToProcess.add( new File( name ) );
+    }
+
+    public void execute() {
+
+        grepFiles();
     }
 }
